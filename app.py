@@ -10,7 +10,7 @@ from PIL import Image
 
 from torch import argmax, load
 from torch.cuda import is_available
-from torch.nn import Sequential, Linear, SELU, Dropout
+from torch.nn import Linear
 from torchvision.transforms import Compose, ToTensor, Resize, Normalize
 from torchvision.models import resnet50
 
@@ -34,7 +34,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
-# ⚠️ FIXED: only 3 classes
+# ✅ 3 classes only
 LABELS = ['Meningioma', 'Glioma', 'Pituitary']
 
 device = "cuda" if is_available() else "cpu"
@@ -43,16 +43,8 @@ device = "cuda" if is_available() else "cpu"
 
 resnet_model = resnet50(pretrained=True)
 
-n_inputs = resnet_model.fc.in_features
-resnet_model.fc = Sequential(
-    Linear(n_inputs, 2048),
-    SELU(),
-    Dropout(p=0.4),
-    Linear(2048, 2048),
-    SELU(),
-    Dropout(p=0.4),
-    Linear(2048, 3)   # ⚠️ 3 classes
-)
+# ✅ MUST MATCH TRAINING EXACTLY
+resnet_model.fc = Linear(resnet_model.fc.in_features, 3)
 
 resnet_model.to(device)
 
@@ -76,8 +68,7 @@ def preprocess_image(image_bytes):
     return transform(img).unsqueeze(0)
 
 def get_prediction(image_bytes):
-    tensor = preprocess_image(image_bytes)
-    tensor = tensor.to(device)
+    tensor = preprocess_image(image_bytes).to(device)
 
     y_hat = resnet_model(tensor)
     class_id = argmax(y_hat, dim=1)

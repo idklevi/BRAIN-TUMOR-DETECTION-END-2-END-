@@ -4,6 +4,8 @@ from io import BytesIO
 import flask
 from flask import render_template
 
+import gdown
+
 from PIL import Image
 
 from torch import argmax, load
@@ -17,6 +19,14 @@ from torchvision.models import resnet50
 UPLOAD_FOLDER = os.path.join('static', 'photos')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+MODEL_PATH = "models/bt_resnet50_model.pt"
+os.makedirs("models", exist_ok=True)
+
+# Download model if not present
+if not os.path.exists(MODEL_PATH):
+    url = "https://drive.google.com/uc?id=1K0nFmRKfQGJGrylwrKIi_1fGZ4PMTzzF"
+    gdown.download(url, MODEL_PATH, quiet=False)
+
 app = flask.Flask(__name__, template_folder='templates')
 app.secret_key = "secret key"
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -24,7 +34,8 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
-LABELS = ['None', 'Meningioma', 'Glioma', 'Pituitary']
+# ⚠️ FIXED: only 3 classes
+LABELS = ['Meningioma', 'Glioma', 'Pituitary']
 
 device = "cuda" if is_available() else "cpu"
 
@@ -32,7 +43,6 @@ device = "cuda" if is_available() else "cpu"
 
 resnet_model = resnet50(pretrained=True)
 
-# Modify classifier
 n_inputs = resnet_model.fc.in_features
 resnet_model.fc = Sequential(
     Linear(n_inputs, 2048),
@@ -41,19 +51,18 @@ resnet_model.fc = Sequential(
     Linear(2048, 2048),
     SELU(),
     Dropout(p=0.4),
-    Linear(2048, 4)   # NO activation here
+    Linear(2048, 3)   # ⚠️ 3 classes
 )
 
 resnet_model.to(device)
 
-# IMPORTANT: fix path if needed
-resnet_model.load_state_dict(load('Model/brain_tumor_model.pt', map_location=device))
+resnet_model.load_state_dict(load(MODEL_PATH, map_location=device))
 resnet_model.eval()
 
 # ------------------ PREPROCESS ------------------
 
 transform = Compose([
-    Resize((224, 224)),  # match training
+    Resize((224, 224)),
     ToTensor(),
     Normalize(mean=[0.485, 0.456, 0.406],
               std=[0.229, 0.224, 0.225])
@@ -73,7 +82,7 @@ def get_prediction(image_bytes):
     y_hat = resnet_model(tensor)
     class_id = argmax(y_hat, dim=1)
 
-    return str(int(class_id)), LABELS[int(class_id)]
+    return LABELS[int(class_id)]
 
 # ------------------ ROUTES ------------------
 
@@ -93,7 +102,7 @@ def uimg():
             return "Invalid file", 400
 
         img_bytes = file.read()
-        class_id, class_name = get_prediction(img_bytes)
+        class_name = get_prediction(img_bytes)
 
         return render_template('pred.html', result=class_name)
 

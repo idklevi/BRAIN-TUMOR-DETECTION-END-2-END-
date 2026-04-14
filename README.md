@@ -211,13 +211,6 @@ http://127.0.0.1:5000
 
 ---
 
-## 🌐 Deployment
-
-This project is deployment-ready using:
-
-* **Docker**
-* **Render**
-
 ### Key Points:
 
 * Uses `gunicorn` for production
